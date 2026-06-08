@@ -80,17 +80,17 @@ CREATE TABLE IF NOT EXISTS log_audit (
 
 -- ==================== ÍNDICES ====================
 
-CREATE INDEX idx_users_email        ON users(email);
-CREATE INDEX idx_users_cedula       ON users(cedula);
-CREATE INDEX idx_vehicles_brand     ON vehicles(brand_id);
-CREATE INDEX idx_vehicles_status    ON vehicles(status);
-CREATE INDEX idx_vehicles_type      ON vehicles(type);
-CREATE INDEX idx_sales_vehicle      ON sales(vehicle_id);
-CREATE INDEX idx_sales_buyer        ON sales(buyer_id);
-CREATE INDEX idx_sales_date         ON sales(sale_date);
-CREATE INDEX idx_log_audit_user     ON log_audit(user_id);
-CREATE INDEX idx_log_audit_entity   ON log_audit(entity, entity_id);
-CREATE INDEX idx_log_audit_created  ON log_audit(created_at);
+CREATE INDEX IF NOT EXISTS idx_users_email        ON users(email);
+CREATE INDEX IF NOT EXISTS idx_users_cedula       ON users(cedula);
+CREATE INDEX IF NOT EXISTS idx_vehicles_brand     ON vehicles(brand_id);
+CREATE INDEX IF NOT EXISTS idx_vehicles_status    ON vehicles(status);
+CREATE INDEX IF NOT EXISTS idx_vehicles_type      ON vehicles(type);
+CREATE INDEX IF NOT EXISTS idx_sales_vehicle      ON sales(vehicle_id);
+CREATE INDEX IF NOT EXISTS idx_sales_buyer        ON sales(buyer_id);
+CREATE INDEX IF NOT EXISTS idx_sales_date         ON sales(sale_date);
+CREATE INDEX IF NOT EXISTS idx_log_audit_user     ON log_audit(user_id);
+CREATE INDEX IF NOT EXISTS idx_log_audit_entity   ON log_audit(entity, entity_id);
+CREATE INDEX IF NOT EXISTS idx_log_audit_created  ON log_audit(created_at);
 
 -- ==================== DATOS INICIALES ====================
 
@@ -127,4 +127,85 @@ INSERT INTO vehicles (brand_id, model, year, price, color, mileage, type, status
     (5, 'Sportage',   2024, 115000000.00, 'Azul',   0,     'NUEVO', 'RESERVADO',  'SUV premium con asistencias de conducción'),
     (6, 'Tucson',     2023, 108000000.00, 'Plata',  8000,  'USADO', 'DISPONIBLE', 'SUV moderna con bajo kilometraje');
 
-RAISE NOTICE '✅ Base de datos del concesionario inicializada correctamente';
+-- Clientes de ejemplo
+INSERT INTO users (first_name, last_name, cedula, email, password, phone) VALUES
+    ('Carlos', 'Ramírez',  '1010101010', 'carlos.ramirez@email.com',  '$2a$10$placeholder_hash_cambiar', '3001234567'),
+    ('María',  'González', '2020202020', 'maria.gonzalez@email.com',  '$2a$10$placeholder_hash_cambiar', '3109876543'),
+    ('Luis',   'Martínez', '3030303030', 'luis.martinez@email.com',   '$2a$10$placeholder_hash_cambiar', '3157654321'),
+    ('Ana',    'Torres',   '4040404040', 'ana.torres@email.com',      '$2a$10$placeholder_hash_cambiar', '3204567890');
+
+INSERT INTO user_roles (user_id, role_id) VALUES
+    (2, 2),
+    (3, 2),
+    (4, 2),
+    (5, 2);
+
+-- Ventas de ejemplo (se marcan los vehículos como VENDIDO a continuación)
+INSERT INTO sales (vehicle_id, buyer_id, registered_by, sale_date, final_price, payment_method, notes) VALUES
+    (2, 2, 1, '2025-03-15', 61000000.00,  'EFECTIVO',         'Venta sin novedad'),
+    (4, 3, 1, '2025-04-10', 71500000.00,  'FINANCIACION',     'Financiado a 36 meses'),
+    (6, 4, 1, '2025-05-22', 107000000.00, 'TRANSFERENCIA',    'Pago electrónico verificado'),
+    (1, 5, 1, '2025-06-01', 94000000.00,  'TARJETA_CREDITO',  'Cliente recurrente, descuento aplicado');
+
+UPDATE vehicles SET status = 'VENDIDO', updated_at = NOW() WHERE id IN (1, 2, 4, 6);
+
+-- ==================== CONSULTAS DE EJEMPLO ====================
+
+-- 1. INSERT: Registrar un nuevo vehículo en el inventario
+-- INSERT INTO vehicles (brand_id, model, year, price, color, mileage, type, status, description)
+-- VALUES (
+--     (SELECT id FROM brands WHERE name = 'Ford'),
+--     'Explorer', 2024, 145000000.00, 'Blanco', 0, 'NUEVO', 'DISPONIBLE',
+--     'SUV de lujo con paquete tecnológico completo'
+-- );
+
+-- 2. UPDATE: Aplicar descuento del 5% a todos los vehículos USADOS disponibles
+-- UPDATE vehicles
+-- SET    price      = ROUND(price * 0.95, 2),
+--        updated_at = NOW()
+-- WHERE  type   = 'USADO'
+--   AND  status = 'DISPONIBLE';
+
+-- 3. SELECT: Listar vehículos disponibles con su marca, ordenados por precio ascendente
+-- SELECT  v.id,
+--         b.name          AS marca,
+--         v.model,
+--         v.year,
+--         v.color,
+--         v.type,
+--         v.mileage,
+--         TO_CHAR(v.price, 'FM$999,999,999.00') AS precio
+-- FROM    vehicles v
+-- JOIN    brands   b ON b.id = v.brand_id
+-- WHERE   v.status = 'DISPONIBLE'
+-- ORDER BY v.price ASC;
+
+-- 4. DELETE: Eliminar registros de auditoría con más de 90 días de antigüedad
+-- DELETE FROM log_audit
+-- WHERE created_at < NOW() - INTERVAL '90 days';
+
+-- 5. GROUP BY: Resumen de ventas agrupado por método de pago
+-- SELECT  payment_method                          AS metodo_pago,
+--         COUNT(*)                                AS total_ventas,
+--         SUM(final_price)                        AS ingresos_totales,
+--         ROUND(AVG(final_price), 2)              AS precio_promedio,
+--         MIN(final_price)                        AS venta_minima,
+--         MAX(final_price)                        AS venta_maxima
+-- FROM    sales
+-- GROUP BY payment_method
+-- ORDER BY ingresos_totales DESC;
+
+-- 6. REPORTE: Ingresos mensuales por marca con participación porcentual
+-- SELECT  TO_CHAR(s.sale_date, 'YYYY-MM')         AS mes,
+--         b.name                                   AS marca,
+--         COUNT(s.id)                              AS unidades_vendidas,
+--         SUM(s.final_price)                       AS ingresos,
+--         ROUND(
+--             SUM(s.final_price) * 100.0
+--             / SUM(SUM(s.final_price)) OVER (PARTITION BY TO_CHAR(s.sale_date, 'YYYY-MM')),
+--         2)                                       AS porcentaje_del_mes
+-- FROM    sales    s
+-- JOIN    vehicles v ON v.id = s.vehicle_id
+-- JOIN    brands   b ON b.id = v.brand_id
+-- GROUP BY TO_CHAR(s.sale_date, 'YYYY-MM'), b.name
+-- ORDER BY mes DESC, ingresos DESC;

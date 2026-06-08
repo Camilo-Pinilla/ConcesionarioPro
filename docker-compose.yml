@@ -17,14 +17,14 @@ services:
       - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql
 
   pgadmin:
-    image: dpage/pgadmin4
+    image: dpage/pgadmin4:9.15
     container_name: concesionario_pgadmin
     restart: always
     environment:
       PGADMIN_DEFAULT_EMAIL: admin@concesionario.com
       PGADMIN_DEFAULT_PASSWORD: admin123
     ports:
-      - "8080:80"
+      - "8083:80"
     depends_on:
       - postgres
 
